@@ -72,7 +72,7 @@ async function inspectZip(file){
    const modBlock=toml.split(/\[\[mods\]\]/i)[1]||toml;
    const tomlId=(modBlock.match(/\bmodId\s*=\s*["']([^"']+)["']/i)||[])[1];
    const tomlName=(modBlock.match(/\bdisplayName\s*=\s*["']([^"']+)["']/i)||[])[1];
-   id=id||tomlId||'';name=name||tomlName||'';
+   id=tomlId||id||'';name=tomlName||name||'';
   }
   if(id && /^[a-z][a-z0-9_]{1,63}$/.test(id))$('modId').value=id;
   if(name)$('modName').value=name;
