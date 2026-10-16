@@ -1,0 +1,43 @@
+name: Build Uploaded Forge Project
+on:
+  workflow_dispatch:
+    inputs:
+      zip_path:
+        description: Repository path of the base64 ZIP upload
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Extract uploaded project
+        env:
+          ZIP_PATH: ${{ inputs.zip_path }}
+        run: |
+          case "$ZIP_PATH" in uploads/*.b64) ;; *) echo "Invalid upload path"; exit 1 ;; esac
+          test -f "$ZIP_PATH"
+          base64 -d "$ZIP_PATH" > project.zip
+          mkdir extracted
+          unzip -q project.zip -d extracted
+          ROOT="$(find extracted -type f -name gradlew -print -quit)"
+          test -n "$ROOT" || (echo "ZIP must contain a Gradle wrapper (gradlew)"; exit 1)
+          ROOT="${ROOT%/gradlew}"
+          test -f "$ROOT/build.gradle" -o -f "$ROOT/build.gradle.kts" || (echo "Gradle build file missing"; exit 1)
+          echo "PROJECT_ROOT=$ROOT" >> "$GITHUB_ENV"
+          chmod +x "$ROOT/gradlew"
+      - name: Build project
+        run: cd "$PROJECT_ROOT" && ./gradlew --no-daemon clean build
+      - name: Upload JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-forge-mod
+          path: extracted/**/build/libs/*.jar
+          if-no-files-found: error
+          retention-days: 7
