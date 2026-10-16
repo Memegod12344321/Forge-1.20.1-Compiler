@@ -16,10 +16,17 @@ main{max-width:920px;margin:auto;padding:28px 16px 60px}.hero{margin-bottom:22px
 <div class="field"><label for="token">Fine-grained personal access token</label><input id="token" class="token" type="password" placeholder="github_pat_…" autocomplete="off"><div class="hint">Needed to start the workflow and check its status. Keep this private. It stays in this page's memory only and is not saved to local storage.</div></div>
 <div class="warn">For the token, grant access only to this repository and enable <b>Actions: Read and write</b>. Do not paste your token into the Java code or commit it to GitHub.</div>
 <div class="actions"><a class="linkbtn secondary" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">Create token</a><a class="linkbtn secondary" id="repoLink" href="https://github.com/Memegod12344321/Forge-1.20.1-Compiler" target="_blank" rel="noreferrer">Open repository</a></div></section>
-<section class="panel"><h2>2. Mod details</h2><div class="grid">
+<section class="panel"><h2>2. Choose your input</h2>
+<div class="grid">
+<label class="field"><span><input type="radio" name="sourceMode" value="java" checked style="width:auto"> Paste Java starter</span><span class="hint">Build one ExampleMod.java file.</span></label>
+<label class="field"><span><input type="radio" name="sourceMode" value="zip" style="width:auto"> Upload full Forge project ZIP</span><span class="hint">Upload a project ZIP containing gradlew, a Gradle build file, and src/.</span></label>
+</div>
+<div id="zipBlock" class="field" hidden><label for="projectZip">Forge project ZIP</label><input id="projectZip" type="file" accept=".zip,application/zip"><div class="hint">The compiler scans mods.toml and gradle.properties to auto-fill Mod Name and Mod ID. ZIP uploads are stored in your PUBLIC repository as base64 text, so their contents are public. Maximum ZIP size: 8 MB.</div><div id="zipInfo" class="hint">No ZIP selected.</div></div>
+</section>
+<section class="panel"><h2>3. Mod details</h2><div class="grid">
 <div class="field"><label for="modName">Display name</label><input id="modName" value="My Forge Mod" maxlength="80"></div>
 <div class="field"><label for="modId">Mod ID</label><input id="modId" value="mymod" maxlength="64"><div class="hint">Lowercase letters, numbers, underscores; must start with a letter.</div></div></div>
-<div class="field"><label for="javaCode">ExampleMod.java source</label><textarea id="javaCode" spellcheck="false">package com.example.examplemod;
+<div class="field" id="javaSourceBlock"><label for="javaCode">ExampleMod.java source</label><textarea id="javaCode" spellcheck="false">package com.example.examplemod;
 
 import net.minecraftforge.fml.common.Mod;
 
@@ -31,54 +38,92 @@ public class ExampleMod {
 }</textarea><div class="hint">Your source must use package <code>com.example.examplemod</code>, class <code>ExampleMod</code>, and annotation <code>@Mod("__MOD_ID__")</code>. Forge APIs can be imported as usual.</div></div>
 <div class="actions"><button id="buildBtn" type="button">Build .jar on GitHub</button><button id="resetBtn" class="secondary" type="button">Reset code</button><a class="linkbtn secondary" id="actionsLink" href="https://github.com/Memegod12344321/Forge-1.20.1-Compiler/actions" target="_blank" rel="noreferrer">View Actions / download artifact</a></div>
 <div id="status" class="status" role="status" aria-live="polite">Ready. Enter your GitHub token, then start a build.</div></section>
-<p class="footer">Builds run on GitHub-hosted Ubuntu runners. Artifacts are retained for 7 days. This starter accepts one Java source file; it is not a visual mod editor.</p>
+<p class="footer">Builds run on GitHub-hosted Ubuntu runners. Artifacts are retained for 7 days. ZIP mode builds an uploaded Gradle project; uploaded ZIP files are committed to this public repository.</p>
 </main>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 const starter=$('javaCode').value;
+let selectedZip=null;
 function urls(){const owner=$('owner').value.trim(),repo=$('repo').value.trim();return {owner,repo,base:'https://api.github.com/repos/'+encodeURIComponent(owner)+'/'+encodeURIComponent(repo),web:'https://github.com/'+owner+'/'+repo};}
 function syncLinks(){const u=urls();$('repoLink').href=u.web;$('actionsLink').href=u.web+'/actions';}
 $('owner').addEventListener('input',syncLinks);$('repo').addEventListener('input',syncLinks);
 function status(s){$('status').textContent=s;}
 function wait(ms){return new Promise(r=>setTimeout(r,ms));}
+function mode(){return document.querySelector('input[name="sourceMode"]:checked').value;}
+function updateMode(){const zip=mode()==='zip';$('zipBlock').hidden=!zip;$('javaSourceBlock').hidden=zip;$('modName').placeholder=zip?'Auto-detected from ZIP':'Display name';$('modId').placeholder=zip?'Auto-detected from ZIP':'Mod ID';}
+document.querySelectorAll('input[name="sourceMode"]').forEach(el=>el.addEventListener('change',updateMode));
 async function api(url,token,options={}){const res=await fetch(url,{...options,headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+token,'X-GitHub-Api-Version':'2022-11-28',...(options.headers||{})}});if(!res.ok){let detail='';try{const j=await res.json();detail=j.message||JSON.stringify(j);}catch{}throw new Error('GitHub API '+res.status+(detail?': '+detail:''));}if(res.status===204)return null;return res.json();}
+function readProp(text,key){const m=text.match(new RegExp('^\\s*'+key+'\\s*=\\s*(.*?)\\s*$','m'));return m?m[1].replace(/^["']|["']$/g,'').trim():'';}
+async function inspectZip(file){
+ selectedZip=file;$('zipInfo').textContent='Reading ZIP metadata…';
+ try{
+  if(!window.JSZip)throw new Error('ZIP reader failed to load. Check your internet connection and reload.');
+  const zip=await JSZip.loadAsync(file);
+  const files=Object.keys(zip.files).filter(n=>!zip.files[n].dir);
+  let name='',id='',props='';
+  const propsFile=files.find(n=>n.endsWith('gradle.properties'));
+  if(propsFile)props=await zip.files[propsFile].async('text');
+  id=readProp(props,'mod_id')||readProp(props,'modId')||readProp(props,'archives_base_name');
+  name=readProp(props,'mod_name')||readProp(props,'modName');
+  const tomlFile=files.find(n=>n.endsWith('META-INF/mods.toml'));
+  if(tomlFile){
+   const toml=await zip.files[tomlFile].async('text');
+   const modBlock=toml.split(/\[\[mods\]\]/i)[1]||toml;
+   const tomlId=(modBlock.match(/\bmodId\s*=\s*["']([^"']+)["']/i)||[])[1];
+   const tomlName=(modBlock.match(/\bdisplayName\s*=\s*["']([^"']+)["']/i)||[])[1];
+   id=id||tomlId||'';name=name||tomlName||'';
+  }
+  if(id && /^[a-z][a-z0-9_]{1,63}$/.test(id))$('modId').value=id;
+  if(name)$('modName').value=name;
+  const hasWrapper=files.some(n=>n.split('/').pop()==='gradlew');
+  const hasBuild=files.some(n=>n.split('/').pop()==='build.gradle'||n.split('/').pop()==='build.gradle.kts');
+  $('zipInfo').textContent='ZIP loaded: '+file.name+' ('+(file.size/1024/1024).toFixed(2)+' MB). '+(name?'Name: '+name+'. ':'')+(id?'Mod ID: '+id+'. ':'')+(hasWrapper&&hasBuild?'Gradle wrapper and build file detected.':'Warning: gradlew or build.gradle(.kts) was not detected; build may fail.');
+ }catch(e){selectedZip=null;$('zipInfo').textContent='Could not read ZIP: '+e.message;}
+}
+$('projectZip').addEventListener('change',e=>{const file=e.target.files&&e.target.files[0];if(file)inspectZip(file);else selectedZip=null;});
+function arrayBufferToBase64(buffer){const bytes=new Uint8Array(buffer);let binary='';const chunk=0x8000;for(let i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode(...bytes.subarray(i,i+chunk));return btoa(binary);}
+async function startAndWait(base,web,token,workflowFile,inputs){
+ const wf=await api(base+'/actions/workflows/'+workflowFile,token);
+ const before=new Date(Date.now()-5000).toISOString();
+ await api(base+'/actions/workflows/'+wf.id+'/dispatches',token,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ref:'main',inputs})});
+ status('Build queued. Waiting for GitHub Actions…');
+ let run=null;
+ for(let i=0;i<24;i++){await wait(2500);const data=await api(base+'/actions/workflows/'+wf.id+'/runs?branch=main&event=workflow_dispatch&per_page=10',token);run=(data.workflow_runs||[]).find(r=>r.created_at>=before);if(run)break;}
+ if(!run){status('Workflow dispatch was accepted, but the run has not appeared yet. Open Actions: '+web+'/actions');return;}
+ status('Build started. Run #'+run.run_number+'\n'+web+'/actions/runs/'+run.id);
+ while(run.status!=='completed'){await wait(5000);run=await api(base+'/actions/runs/'+run.id,token);status('Forge build running…\nStatus: '+run.status+'\n'+web+'/actions/runs/'+run.id);}
+ if(run.conclusion!=='success'){status('Build '+run.conclusion+'. Open the run and check the failed step/logs:\n'+web+'/actions/runs/'+run.id);return;}
+ const arts=await api(base+'/actions/runs/'+run.id+'/artifacts',token);
+ const artifact=(arts.artifacts||[]).find(a=>a.name==='compiled-forge-mod'&&!a.expired);
+ if(!artifact){status('Build succeeded, but the artifact was not found. Open the run:\n'+web+'/actions/runs/'+run.id);return;}
+ status('Build succeeded! Open the Actions run and download “compiled-forge-mod”. The JAR is inside the ZIP.\n'+web+'/actions/runs/'+run.id);
+ window.open(web+'/actions/runs/'+run.id,'_blank','noopener');
+}
 $('resetBtn').onclick=()=>{$('javaCode').value=starter;};
 $('buildBtn').onclick=async()=>{
  const btn=$('buildBtn');if(btn.disabled)return;
  const {owner,repo,base,web}=urls(),token=$('token').value.trim(),name=$('modName').value.trim(),id=$('modId').value.trim(),code=$('javaCode').value;
- if(!owner||!repo||!token||!name||!id||!code.trim()){status('Fill in all fields, including your GitHub token.');return;}
- if(!/^[a-z][a-z0-9_]{1,63}$/.test(id)){status('Invalid mod ID. Use 2–64 lowercase letters, numbers, or underscores, starting with a letter.');return;}
- if(!code.includes('package com.example.examplemod;')||!code.includes('class ExampleMod')||!code.includes('@Mod("__MOD_ID__")')){status('Source template check failed. Keep the required package, class ExampleMod, and @Mod("__MOD_ID__") placeholder.');return;}
+ if(!owner||!repo||!token){status('Fill in GitHub owner, repository, and token.');return;}
+ if(mode()==='java'&&(!name||!id||!code.trim())){status('Fill in the mod details and Java source.');return;}
+ if(mode()==='java'&&(!/^[a-z][a-z0-9_]{1,63}$/.test(id)||!code.includes('package com.example.examplemod;')||!code.includes('class ExampleMod')||!code.includes('@Mod("__MOD_ID__")'))){status('Check the Mod ID and required starter Java template.');return;}
+ if(mode()==='zip'&&!selectedZip){status('Choose a Forge project ZIP first.');return;}
+ if(mode()==='zip'&&selectedZip.size>8*1024*1024){status('ZIP is larger than 8 MB. Please choose a smaller project ZIP.');return;}
  btn.disabled=true;
  try{
-   status('Checking repository access…');
-   const wf=await api(base+'/actions/workflows/build-mod.yml',token);
-   const before=new Date(Date.now()-5000).toISOString();
-   status('Starting Forge build…');
-   await api(base+'/actions/workflows/'+wf.id+'/dispatches',token,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ref:'main',inputs:{mod_name:name,mod_id:id,java_code:code}})});
-   status('Build queued. Waiting for GitHub Actions to create the run…');
-   let run=null;
-   for(let i=0;i<24;i++){
-     await wait(2500);
-     const data=await api(base+'/actions/workflows/'+wf.id+'/runs?branch=main&event=workflow_dispatch&per_page=10',token);
-     run=(data.workflow_runs||[]).find(r=>r.created_at>=before);
-     if(run)break;
-   }
-   if(!run){status('Workflow dispatch was accepted, but the run did not appear yet. Open Actions to check it: '+web+'/actions');return;}
-   status('Build started. Run #'+run.run_number+'\nStatus: '+run.status+'\n'+web+'/actions/runs/'+run.id);
-   while(run.status!=='completed'){
-     await wait(5000);
-     const data=await api(base+'/actions/runs/'+run.id,token);run=data;
-     status('Forge build running…\nStatus: '+run.status+(run.conclusion?'\nResult: '+run.conclusion:'')+'\n'+web+'/actions/runs/'+run.id);
-   }
-   if(run.conclusion!=='success'){status('Build '+run.conclusion+'. Open the run and check the failed step / logs:\n'+web+'/actions/runs/'+run.id);return;}
-   const arts=await api(base+'/actions/runs/'+run.id+'/artifacts',token);
-   const artifact=(arts.artifacts||[]).find(a=>a.name==='compiled-forge-mod'&&!a.expired);
-   if(!artifact){status('Build succeeded, but the artifact was not found. Open the run to inspect artifacts:\n'+web+'/actions/runs/'+run.id);return;}
-   status('Build succeeded! Your compiled mod is ready. Open the run page and download the “compiled-forge-mod” artifact ZIP. The JAR is inside it.\n'+web+'/actions/runs/'+run.id+'\n\nArtifact download is available from GitHub Actions while signed in.');
-   window.open(web+'/actions/runs/'+run.id,'_blank','noopener');
- }catch(e){status('Could not start/check the build. '+e.message+'\nCheck that the token is for this repository and has Actions read/write permission.');}
+  if(mode()==='java'){
+   status('Checking repository access and starting Java build…');
+   await startAndWait(base,web,token,'build-mod.yml',{mod_name:name,mod_id:id,java_code:code});
+  }else{
+   status('Reading ZIP and uploading it to your public GitHub repository…');
+   const zipB64=arrayBufferToBase64(await selectedZip.arrayBuffer());
+   const path='uploads/forge-project-'+Date.now()+'.b64';
+   await api(base+'/contents/'+path,token,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:'Upload Forge project ZIP for build',content:btoa(zipB64)})});
+   status('ZIP uploaded publicly. Starting the Forge project build…');
+   await startAndWait(base,web,token,'build-zip.yml',{zip_path:path});
+  }
+ }catch(e){status('Could not start/check the build. '+e.message+'\nFor ZIP uploads, the token needs Actions: Read and write AND Contents: Read and write for this repository.');}
  finally{btn.disabled=false;}
 };
-syncLinks();
+syncLinks();updateMode();
 </script></body></html>
