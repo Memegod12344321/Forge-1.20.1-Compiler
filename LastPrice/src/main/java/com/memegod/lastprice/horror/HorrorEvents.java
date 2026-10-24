@@ -2,6 +2,8 @@ package com.memegod.lastprice.horror;
 
 import com.memegod.lastprice.LastPrice;
 import com.memegod.lastprice.structure.RitualSiteBuilder;
+import com.memegod.lastprice.structure.AbandonedHouseBuilder;
+import com.memegod.lastprice.structure.WatchtowerBuilder;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -11,10 +13,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.LightningBolt;
 import net.minecraft.world.entity.monster.Enderman;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -49,12 +48,14 @@ public final class HorrorEvents {
             if (level.random.nextFloat() < 0.65f) return;
         }
 
-        switch (level.random.nextInt(5)) {
+        switch (level.random.nextInt(7)) {
             case 0 -> distantWhisper(player);
             case 1 -> lightsOutMoment(player);
             case 2 -> falseFootsteps(player);
             case 3 -> markTheRitual(player);
-            default -> watcher(player);
+            case 4 -> watcher(player);
+            case 5 -> abandonedHouse(player);
+            default -> watchtower(player);
         }
     }
 
@@ -76,7 +77,7 @@ public final class HorrorEvents {
     private static void falseFootsteps(ServerPlayer player) {
         ServerLevel level = player.serverLevel();
         BlockPos behind = player.blockPosition().relative(player.getDirection().getOpposite(), 4);
-        level.playSound(null, behind, SoundEvents.WOODEN_STEP, SoundSource.HOSTILE, 1.4f, 0.65f);
+        level.playSound(null, behind, SoundEvents.WOOD_STEP, SoundSource.HOSTILE, 1.4f, 0.65f);
         level.playSound(null, behind, SoundEvents.GRAVEL_STEP, SoundSource.HOSTILE, 0.9f, 0.8f);
         player.displayClientMessage(Component.literal("§7Footsteps stop when you stop."), true);
     }
@@ -108,6 +109,29 @@ public final class HorrorEvents {
         watcher.setPersistenceRequired();
         level.addFreshEntity(watcher);
         player.displayClientMessage(Component.literal("§8Don't look behind you."), true);
+    }
+
+    private static void abandonedHouse(ServerPlayer player) {
+        ServerLevel level = player.serverLevel();
+        BlockPos origin = player.blockPosition().relative(player.getDirection().getOpposite(), 18);
+        if (!level.getBlockState(origin).isAir() || !level.getBlockState(origin.above()).isAir()) {
+            player.displayClientMessage(Component.literal("§8A house waits somewhere beyond the trees."), true);
+            return;
+        }
+        AbandonedHouseBuilder.build(level, origin);
+        level.playSound(null, origin, SoundEvents.WOODEN_DOOR_OPEN, SoundSource.AMBIENT, 1.0f, 0.55f);
+        player.displayClientMessage(Component.literal("§8You notice an abandoned house nearby."), true);
+    }
+
+    private static void watchtower(ServerPlayer player) {
+        ServerLevel level = player.serverLevel();
+        BlockPos origin = player.blockPosition().relative(player.getDirection().getOpposite(), 20);
+        if (!level.getBlockState(origin).isAir() || !level.getBlockState(origin.above()).isAir()) {
+            player.displayClientMessage(Component.literal("§8A silhouette stands somewhere in the distance."), true);
+            return;
+        }
+        WatchtowerBuilder.build(level, origin);
+        player.displayClientMessage(Component.literal("§8There is a watchtower in the distance."), true);
     }
 
     @SubscribeEvent
