@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @Mod.EventBusSubscriber(modid = LastPrice.MOD_ID)
+/** Schedules lightweight ambient horror events for survival players. */
 public final class HorrorEvents {
     private static final Map<UUID, Integer> PLAYER_TICKS = new HashMap<>();
     private static final int EVENT_INTERVAL = 20 * 60 * 4;
