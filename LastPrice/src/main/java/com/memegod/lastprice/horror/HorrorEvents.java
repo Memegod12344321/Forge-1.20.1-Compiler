@@ -1,6 +1,7 @@
 package com.memegod.lastprice.horror;
 
 import com.memegod.lastprice.LastPrice;
+import com.memegod.lastprice.structure.RitualSiteBuilder;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -14,8 +15,6 @@ import net.minecraft.world.entity.LightningBolt;
 import net.minecraft.world.entity.monster.Enderman;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -84,17 +83,14 @@ public final class HorrorEvents {
 
     private static void markTheRitual(ServerPlayer player) {
         ServerLevel level = player.serverLevel();
-        BlockPos center = player.blockPosition().offset(0, -1, 0);
-        for (int i = 0; i < 8; i++) {
-            double angle = Math.PI * 2 * i / 8.0;
-            BlockPos p = center.offset((int)Math.round(Math.cos(angle) * 3), 0,
-                    (int)Math.round(Math.sin(angle) * 3));
-            if (level.getBlockState(p).isAir() || level.getBlockState(p).canBeReplaced())
-                level.setBlock(p, Blocks.CRYING_OBSIDIAN.defaultBlockState(), 3);
+        BlockPos center = player.blockPosition().relative(player.getDirection().getOpposite(), 7);
+        if (!level.getBlockState(center).isAir() || !level.getBlockState(center.above()).isAir()) {
+            player.displayClientMessage(Component.literal("§4You feel a ritual watching from somewhere nearby."), true);
+            return;
         }
-        level.setBlock(center, Blocks.BLACKSTONE.defaultBlockState(), 3);
+        RitualSiteBuilder.build(level, center);
         level.playSound(null, center, SoundEvents.RESPAWN_ANCHOR_DEPLETE, SoundSource.HOSTILE, 1.0f, 0.6f);
-        player.displayClientMessage(Component.literal("§4A symbol has appeared beneath you."), true);
+        player.displayClientMessage(Component.literal("§4A ritual site appeared nearby."), true);
     }
 
     private static void watcher(ServerPlayer player) {
