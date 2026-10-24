@@ -1,0 +1,47 @@
+name: Last Price Forge 1.20.1 Build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'LastPrice/**'
+      - '.github/workflows/lastprice-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: LastPrice
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Build Forge mod
+        run: |
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew
+            ./gradlew --no-daemon clean build
+          elif [ -f ./build.gradle ] || [ -f ./build.gradle.kts ]; then
+            gradle --no-daemon clean build
+          else
+            echo "::error::No Gradle Forge project found in LastPrice/. Add build.gradle and src/ first."
+            exit 1
+          fi
+      - name: Upload mod JAR
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LastPrice-Forge-1.20.1
+          path: LastPrice/build/libs/*.jar
+          if-no-files-found: error
+          retention-days: 14
