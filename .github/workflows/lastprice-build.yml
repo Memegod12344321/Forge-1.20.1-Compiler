@@ -24,19 +24,18 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-      - name: Build Forge mod
+      - name: Install Gradle 8.8
         run: |
-          if [ -f ./gradlew ]; then
-            chmod +x ./gradlew
-            ./gradlew --no-daemon clean build
-          elif [ -f ./build.gradle ] || [ -f ./build.gradle.kts ]; then
-            gradle --no-daemon clean build
-          else
-            echo "::error::No Gradle Forge project found in LastPrice/. Add build.gradle and src/ first."
-            exit 1
-          fi
+          curl --fail --location --retry 3 https://services.gradle.org/distributions/gradle-8.8-bin.zip -o /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /tmp
+          echo "/tmp/gradle-8.8/bin" >> "$GITHUB_PATH"
+      - name: Verify project files
+        run: |
+          test -f build.gradle
+          test -f src/main/java/com/memegod/lastprice/LastPrice.java
+          test -f src/main/resources/META-INF/mods.toml
+      - name: Build Forge mod
+        run: gradle --no-daemon clean build
       - name: Upload mod JAR
         if: success()
         uses: actions/upload-artifact@v4
