@@ -13,7 +13,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.monster.Enderman;
+import net.minecraft.world.entity.monster.EnderMan;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -62,7 +62,7 @@ public final class HorrorEvents {
     private static void distantWhisper(ServerPlayer player) {
         ServerLevel level = player.serverLevel();
         player.displayClientMessage(Component.literal("§8Something whispers your name from far away."), true);
-        level.playSound(null, player.blockPosition(), SoundEvents.AMBIENT_CAVE, SoundSource.AMBIENT, 1.8f, 0.55f);
+        level.playSound(null, player.blockPosition(), SoundEvents.AMBIENT_CAVE.value(), SoundSource.AMBIENT, 1.8f, 0.55f);
         player.addEffect(new MobEffectInstance(MobEffects.DARKNESS, 50, 0, false, false, true));
     }
 
@@ -90,7 +90,7 @@ public final class HorrorEvents {
             return;
         }
         RitualSiteBuilder.build(level, center);
-        level.playSound(null, center, SoundEvents.RESPAWN_ANCHOR_DEPLETE, SoundSource.HOSTILE, 1.0f, 0.6f);
+        level.playSound(null, center, SoundEvents.RESPAWN_ANCHOR_DEPLETE.value(), SoundSource.HOSTILE, 1.0f, 0.6f);
         player.displayClientMessage(Component.literal("§4A ritual site appeared nearby."), true);
     }
 
@@ -101,7 +101,7 @@ public final class HorrorEvents {
             player.displayClientMessage(Component.literal("§8You feel watched."), true);
             return;
         }
-        Enderman watcher = EntityType.ENDERMAN.create(level);
+        EnderMan watcher = EntityType.ENDERMAN.create(level);
         if (watcher == null) return;
         watcher.moveTo(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5, player.getYRot() + 180, 0);
         watcher.setTarget(null);
